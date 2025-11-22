@@ -961,20 +961,36 @@ function computeTaxes_legacy(){
 
   const marriage = document.getElementById("marriage").checked;
   const blind = document.getElementById("blind").checked;
-  const age = +document.getElementById("age")?.value||0;
 
-  const divInc = +document.getElementById("divInc")?.value||0;
-  const savInc = +document.getElementById("savInc")?.value||0;
-  const cgtGain = +document.getElementById("cgtGain")?.value||0;
-  const cgtProp = +document.getElementById("cgtProp")?.value||0;
+  const ageEl = document.getElementById("age");
+  const age = ageEl ? +ageEl.value || 0 : 0;
 
-  const propRent = +document.getElementById("propRent")?.value||0;
+  const divIncEl = document.getElementById("divInc");
+  const divInc = divIncEl ? +divIncEl.value || 0 : 0;
 
-  const incErNI = document.getElementById("incErNI")?.checked || false;
+  const savIncEl = document.getElementById("savInc");
+  const savInc = savIncEl ? +savIncEl.value || 0 : 0;
 
-  const cbKids = +document.getElementById("cbKids").value||0;
-  const carriedGain = +document.getElementById("carriedGain")?.value||0;
-  const rentRoom = document.getElementById("rentRoom")?.checked || false;
+  const cgtGainEl = document.getElementById("cgtGain");
+  const cgtGain = cgtGainEl ? +cgtGainEl.value || 0 : 0;
+
+  const cgtPropEl = document.getElementById("cgtProp");
+  const cgtProp = cgtPropEl ? +cgtPropEl.value || 0 : 0;
+
+  const propRentEl = document.getElementById("propRent");
+  const propRent = propRentEl ? +propRentEl.value || 0 : 0;
+
+  const incErNIEl = document.getElementById("incErNI");
+  const incErNI = incErNIEl ? !!incErNIEl.checked : false;
+
+  const cbKidsEl = document.getElementById("cbKids");
+  const cbKids = cbKidsEl ? +cbKidsEl.value || 0 : 0;
+
+  const carriedGainEl = document.getElementById("carriedGain");
+  const carriedGain = carriedGainEl ? +carriedGainEl.value || 0 : 0;
+
+  const rentRoomEl = document.getElementById("rentRoom");
+  const rentRoom = rentRoomEl ? !!rentRoomEl.checked : false;
 
   // Apply allowances to self-employment and property rent
   const seAdj = Math.max(0, se - 1000); // Hardcoded trade allowance
@@ -1274,40 +1290,40 @@ function getTopThreeCategories() {
     ? latestTotals.totalTax
     : (typeof currentEffBase === "number" ? currentEffBase : 0);
 
-  // Category pounds: mirror the "Where Your Money Goes" table and use the same base as it does
+  // Category pounds: use the same effective base as the "Where Your Money Goes" table
   const baseTax = (typeof currentEffBase === "number" ? currentEffBase : headlineTotal);
 
-  // Use the same parent node as the "Where Your Money Goes" table
-  const parent = (typeof currentNode === "object" && currentNode && typeof currentNode.amount === "number")
-    ? currentNode
-    : DATASET;
-
+  // Always use the *top-level* spending split for the infographic
   const total = DATASET.amount || 1;
-  const parentShareOfTotal = (parent === DATASET)
-    ? 1
-    : ((parent.amount || 0) / total || 0);
 
-  const rows = ((parent.children) || []).map(ch => {
-    const shareOfParent = (parent.amount ? (ch.amount / parent.amount) : 0) || 0;
-    const pounds = baseTax * parentShareOfTotal * shareOfParent;
-    const color = (customColors && customColors[ch.name]) || (baseColors && baseColors[ch.name]) || "#0077C8";
-    return {
-      name: ch.name,
-      pounds,
-      share: shareOfParent * 100,
-      color
-    };
-  }).filter(r => r.pounds > 0);
+  // Lock the infographic to these three main categories
+  const wantedNames = new Set(["Welfare", "Health", "Debt Interest"]);
 
-  rows.sort((a, b) => b.pounds - a.pounds);
+  const rows = ((DATASET.children) || [])
+    .filter(ch => wantedNames.has(ch.name))
+    .map(ch => {
+      const shareOfTotal = (ch.amount || 0) / total;
+      const pounds = baseTax * shareOfTotal;
+      const color =
+        (customColors && customColors[ch.name]) ||
+        (baseColors && baseColors[ch.name]) ||
+        "#0077C8";
 
+      return {
+        name: ch.name,
+        pounds,
+        share: shareOfTotal * 100,
+        color
+      };
+    })
+    .filter(r => r.pounds > 0);
+
+  // keep order as in DATASET (i.e. Welfare, Health, Debt Interest)
   return {
     totalTax: headlineTotal,
-    top: rows.slice(0, 3)
+    top: rows
   };
 }
-
-
 function drawInfographicOnCanvas() {
   const canvas = document.getElementById("infographicCanvas");
   if (!canvas) return null;
@@ -1535,9 +1551,10 @@ function downloadInfographic() {
   "incErNI",
   "cbKids","carriedGain","rentRoom"
 ].forEach(id=>{
-  const el=document.getElementById(id);
-  el?.addEventListener("input", computeTaxes);
-  el?.addEventListener("change", computeTaxes);
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", computeTaxes);
+  el.addEventListener("change", computeTaxes);
 });
 
 // Safely trigger an initial calculation if the new computeTaxes wrapper exists
@@ -2214,7 +2231,10 @@ window.computeTaxes = function() {
     pensionRASNet: 0, // if you add an input, wire it here
     blind: readBool("blind"),
     marriageAllowanceRecipient: readBool("marriage"),
-    children: +(document.getElementById("cbKids")?.value||0),
+    children: (function () {
+      var el = document.getElementById("cbKids");
+      return el ? +(el.value || 0) : 0;
+    })(),
     age: readNumber("age"),
     includeEmployerNIC: readBool("incErNI")
   };

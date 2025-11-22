@@ -1293,10 +1293,8 @@ function getTopThreeCategories() {
   // Category pounds: use the same effective base as the "Where Your Money Goes" table
   const baseTax = (typeof currentEffBase === "number" ? currentEffBase : headlineTotal);
 
-  // Always use the *top-level* spending split for the infographic
+  // Always use the *top-level* spending split for the infographic and lock to the three main categories
   const total = DATASET.amount || 1;
-
-  // Lock the infographic to these three main categories
   const wantedNames = new Set(["Welfare", "Health", "Debt Interest"]);
 
   const rows = ((DATASET.children) || [])
@@ -1304,10 +1302,7 @@ function getTopThreeCategories() {
     .map(ch => {
       const shareOfTotal = (ch.amount || 0) / total;
       const pounds = baseTax * shareOfTotal;
-      const color =
-        (customColors && customColors[ch.name]) ||
-        (baseColors && baseColors[ch.name]) ||
-        "#0077C8";
+      const color = (customColors && customColors[ch.name]) || (baseColors && baseColors[ch.name]) || "#0077C8";
 
       return {
         name: ch.name,
@@ -1318,12 +1313,15 @@ function getTopThreeCategories() {
     })
     .filter(r => r.pounds > 0);
 
-  // keep order as in DATASET (i.e. Welfare, Health, Debt Interest)
+  // Keep order as defined in DATASET (i.e. Welfare, Health, Debt Interest)
   return {
     totalTax: headlineTotal,
     top: rows
   };
 }
+
+
+
 function drawInfographicOnCanvas() {
   const canvas = document.getElementById("infographicCanvas");
   if (!canvas) return null;
@@ -1550,7 +1548,7 @@ function downloadInfographic() {
   "divInc","savInc","cgtGain","cgtProp","propRent",
   "incErNI",
   "cbKids","carriedGain","rentRoom"
-].forEach(id=>{
+].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener("input", computeTaxes);
@@ -2232,7 +2230,7 @@ window.computeTaxes = function() {
     blind: readBool("blind"),
     marriageAllowanceRecipient: readBool("marriage"),
     children: (function () {
-      var el = document.getElementById("cbKids");
+      const el = document.getElementById("cbKids");
       return el ? +(el.value || 0) : 0;
     })(),
     age: readNumber("age"),

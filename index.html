@@ -125,11 +125,6 @@ details.compact{padding:.45rem .55rem}
 details.compact summary{font-size:13px}
 details.compact .form-grid, details.compact .form-grid-3{margin:.2rem 0}
 details.compact .field{min-height:56px}
-background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 6px 16px rgba(16,42,67,.08);
-  padding: 16px 20px;
-  margin-bottom: 16px;
 .input-section{background: #fff;
   border-radius: 12px;
   box-shadow: 0 6px 16px rgba(16,42,67,.08);
@@ -528,6 +523,74 @@ input:focus{outline:none;box-shadow:0 0 0 3px rgba(19,64,121,.18)}
   }
   #exportCard p.small-note {
     margin-top: 0 !important;
+  }
+</style>
+
+
+<style id="asi-erni-safari-fix">
+  /* Safari-specific stabilisation for Employer NI / tooltip layout */
+
+  .summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .summary-header .summary-title-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .summary-header .erni-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .summary-header .erNI-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .summary-header .erNI-label input {
+    margin-right: 6px;
+  }
+
+  .erni-tip {
+    position: absolute !important;
+    top: calc(100% + 8px) !important;
+    right: 0 !important;
+    left: auto !important;
+    transform: none !important;
+    width: min(320px, 80vw) !important;
+
+    display: none;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .erni-tip.show {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (max-width: 640px) {
+    .summary-header .erni-wrap {
+      width: 100%;
+      justify-content: flex-start;
+      margin-top: 4px;
+    }
   }
 </style>
 
@@ -1093,9 +1156,20 @@ function computeTaxes_legacy(){
   addRow("Property CGT", "18 / 24%", cgtPropTax);
   addRow("HICBC", `taper ${HICBC_START.toLocaleString()}–${HICBC_END.toLocaleString()}`, hicbc);
 
-  drawDrilldown();
-  renderSummaryTable();
 }
+
+
+
+// Hook for the main compute() wrapper: whenever taxes are recomputed,
+ // refresh the drill-down pie and its summary table in one place.
+window.updatePieChart = function(res) {
+  try {
+    drawDrilldown();
+    renderSummaryTable();
+  } catch (e) {
+    // Fail silently if the chart is not yet initialised
+  }
+};
 
 /* ---------- Drill-down pie (labels removed) ---------- */
 const chartHost = document.getElementById("chart");
@@ -1452,19 +1526,17 @@ function drawInfographicOnCanvas() {
   const gap = chartWidth / (n * 2.5); // tighter grouping
   const barWidth = gap * 1.4;
 
-  // Compute max share to scale bars nicely
+  // Compute max share to scale bars nicely (based on category share of your tax)
   let maxShare = 0;
   topThree.forEach(cat => {
-    if (totalTax > 0) {
-      const share = cat.pounds / totalTax;
-      if (share > maxShare) maxShare = share;
-    }
+    const share = (typeof cat.share === "number") ? (cat.share / 100) : 0;
+    if (share > maxShare) maxShare = share;
   });
   if (maxShare === 0) maxShare = 1; // avoid divide-by-zero
 
   topThree.forEach((cat, i) => {
     const cx = chartLeft + gap * (1.25 + 2.5 * i); // centre of each bar, closer & centred
-    const share = (totalTax > 0) ? (cat.pounds / totalTax) : 0;
+    const share = (typeof cat.share === "number") ? (cat.share / 100) : 0;
     const barMaxHeight = chartHeight * 0.9;
     const barHeight = barMaxHeight * (share / maxShare);
     const baseY = chartBottom;
@@ -1478,8 +1550,8 @@ function drawInfographicOnCanvas() {
     ctx.fill();
 
     // Top text: £ amount above bar
-    const percent = totalTax > 0 ? (cat.pounds / totalTax * 100) : 0;
-    const percentLabel = totalTax > 0 ? `${percent.toFixed(1)}%` : "";
+    const percent = (typeof cat.share === "number") ? cat.share : 0;
+    const percentLabel = percent > 0 ? `${percent.toFixed(1)}%` : "";
     const amountLabel = formatPounds(cat.pounds);
 
     ctx.font = "28px 'ConcourseC7', 'Concourse', sans-serif";
@@ -1501,7 +1573,7 @@ function drawInfographicOnCanvas() {
     ctx.fillText(cat.name, cx, baseY + 26);
   });
 
-  // Explainer text, centred near bottom of card
+// Explainer text, centred near bottom of card
   const footY = cardY + cardH - 35;
   ctx.font = "15px 'ConcourseC7', 'Concourse', sans-serif";
   ctx.fillStyle = "#6b7280";
@@ -1552,7 +1624,6 @@ function downloadInfographic() {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener("input", computeTaxes);
-  el.addEventListener("change", computeTaxes);
 });
 
 // Safely trigger an initial calculation if the new computeTaxes wrapper exists
@@ -2265,6 +2336,11 @@ window.computeTaxes = function() {
     window.__asiLastTotals = res.totals;
     window.__asiLastBreakdown = res.breakdown;
   } catch (_) {}
+  // Update legacy tables / internal base (bands, etc.) before we redraw the pie.
+  if (typeof computeTaxes_legacy === "function") {
+    try { computeTaxes_legacy(); } catch (e) { /* ignore */ }
+  }
+
 
   // Dispatch update event for any chart/summary listeners
   try { window.dispatchEvent(new CustomEvent('asi:tax:update', { detail: res })); } catch(e) {}
@@ -2276,12 +2352,6 @@ window.computeTaxes = function() {
   if (typeof window.renderPie === 'function')      { try { window.renderPie(res); }      catch(e){} }
   if (typeof window.refreshSummaryCard === 'function') { try { window.refreshSummaryCard(res); } catch(e){} }
 
-  // Finally, call the calculator's original computeTaxes (if any) to preserve chart/summary behaviour
-
-  // Trigger any legacy UI updates if they exist
-  if (typeof computeTaxes_legacy === "function") {
-    try { computeTaxes_legacy(); } catch (e) { /* ignore */ }
-  }
 return res;
 };
 window.compute = compute;
@@ -2290,12 +2360,11 @@ window.compute = compute;
 // Auto-bind all inputs/selects/toggles to recalc
 function __asiBindAll() {
   const recalc = () => { try { window.computeTaxes(); } catch(e){} };
-  const sel = 'input, select, textarea, button';
+  // Only trigger recomputes on actual value changes while typing,
+  // to avoid blur/change/click races with the chart.
+  const sel = 'input, select, textarea';
   document.querySelectorAll(sel).forEach(el => {
     el.addEventListener('input', recalc);
-    el.addEventListener('change', recalc);
-    el.addEventListener('click', recalc);
-    el.addEventListener('keyup', recalc);
   });
 }
 document.addEventListener("DOMContentLoaded", __asiBindAll);

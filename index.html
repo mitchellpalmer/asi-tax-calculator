@@ -115,8 +115,7 @@ svg{width:100%;height:100%}
 .summary-header{display:flex;align-items:center;justify-content:space-between;position:relative;margin-bottom:6px}
 .summary-title-wrap{display:inline-flex;align-items:center;gap:8px;position:relative}
 .erni-wrap{display:flex;align-items:center;gap:8px;position:relative}
-.erNI-label{color:var(--ink);font-size:12.5px;font-weight:700;display:flex;align-items:center;
-  white-space: nowrap;}
+.erNI-label{color:var(--ink);font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;white-space:nowrap;}
 .info-icon{width:18px;height:18px;border-radius:50%;border:none;background:var(--ink);color:#fff;font-weight:800;font-size:12px;line-height:18px;text-align:center;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .erni-tip.show{opacity: 1;
   pointer-events: auto;}
@@ -252,7 +251,10 @@ details.compact .field{min-height:56px}
 body, .card, h1, h2, h3, h4, h5, h6, p, span, label, .result, .disclaimer, input, select, button{color: #134079 !important;}
 .info-icon{background: #134079 !important;
   color: #ffffff !important;}
-input[type="checkbox"]{accent-color: #134079;}
+@supports (-webkit-touch-callout: none) {
+  #incErNI{width:auto;padding:0;margin-right:6px;}
+}
+input[type="checkbox"]{accent-color:#134079;}
 .tooltip{color: #134079 !important;
   border-color: rgba(19,64,121,0.25) !important;}
 .legend, .legend-item, .legend-item span, .legend-item div{color: #134079 !important;}
@@ -526,18 +528,6 @@ input:focus{outline:none;box-shadow:0 0 0 3px rgba(19,64,121,.18)}
   }
 </style>
 
-
-<style id="asi-safari-erni-fix">
-@supports (-webkit-touch-callout: none) {
-  /* Safari-specific adjustment so Employer NI label doesn't bleed off the card */
-  .summary-header{
-    flex-wrap: wrap;
-  }
-  .erNI-label{
-    white-space: normal;
-  }
-}
-</style>
 </head>
 <body>
 <div class="wrap">
@@ -1754,6 +1744,7 @@ const RATES = {
     },
     "employer_class1": {
       "secondary_threshold": 5000,
+      "upper_secondary_threshold": 50270,
       "rate": 0.15
     },
     "self_employed": {

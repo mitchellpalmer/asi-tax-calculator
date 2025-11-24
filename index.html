@@ -529,6 +529,27 @@ input:focus{outline:none;box-shadow:0 0 0 3px rgba(19,64,121,.18)}
   }
 </style>
 
+
+<style id="asi-v21_72f-erni-tooltip-fix">
+  /* Match HICBC/Age tooltip style */
+  .summary-header .erni-wrap { position: relative; }
+  .summary-header .erni-tip {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 10px);
+    transform: translateY(-50%);
+    max-width: 240px;       /* match standard tooltip width */
+    padding: 8px 12px;       /* consistent bubble padding */
+    white-space: normal;
+    background-color: #134079 !important;
+    color: #ffffff !important;
+    border: 1px solid #134079 !important;
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(16,42,67,.1) !important;
+    z-index: 30;
+  }
+</style>
+
 </head>
 <body>
 <div class="wrap">

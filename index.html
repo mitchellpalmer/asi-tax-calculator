@@ -920,7 +920,7 @@ function niSelfEmployed(seIncome){
 }
 function calcDividendTax(div, basicLeft, higherLeft){
   const allowance = 500;
-  const rates = {basic:0.0875, higher:0.3375, addl:0.3935};
+  const rates = {basic:0.1075, higher:0.3575, addl:0.4135};
   let taxable = Math.max(0, div - allowance);
   const inBasic = Math.min(taxable, basicLeft); taxable -= inBasic;
   const inHigher = Math.min(taxable, higherLeft); taxable -= inHigher;
@@ -944,7 +944,7 @@ function calcSavingsTax(interest, basicLeft, higherLeft, nonSavingsIncome){
   const inBasic = Math.min(taxable, basicLeft); taxable -= inBasic;
   const inHigher = Math.min(taxable, higherLeft); taxable -= inHigher;
   const inAddl = taxable;
-  return inBasic*0.20 + inHigher*0.40 + inAddl*0.45;
+  return inBasic*0.22 + inHigher*0.42 + inAddl*0.47;
 }
 function calcCGT(gain, AEA, basicLeft){
   const taxable = Math.max(0, gain - AEA);
@@ -1016,8 +1016,8 @@ function computeTaxes_legacy(){
   const propRentAdj = Math.max(0, propRent - (rentRoom ? 7500 : 1000)); // Rent a Room overrides property allowance
 
   // Non-savings total includes employment after sacrifice, self-employment, and property income
-  const empAfterSac = Math.max(0, emp - pensSac);
-  const taxableIncomeAfterPens = Math.max(0, empAfterSac - pensEmp);
+  const empAfterSac = emp; // salary sacrifice is NI-able; use gross for NI, adjust only income tax
+  const taxableIncomeAfterPens = Math.max(0, empAfterSac - pensEmp - pensSac);
   const nonSavingsTotal = taxableIncomeAfterPens + seAdj + propRentAdj;
 
   // Adjusted net income includes non-savings plus dividends and savings
@@ -1038,10 +1038,10 @@ function computeTaxes_legacy(){
   const propIncTax = Math.max(0, taxNonSavCombined - earnedTax);
 
   // NI (inc. self-employed) with age adjustments
-  const niEmpRaw = niEmployee(empAfterSac);
+  const niEmpRaw = niEmployee(emp);
   const niSERaw = niSelfEmployed(seAdj);
   let niErRaw = 0;
-  if(incErNI){ niErRaw = niEmployer(empAfterSac); }
+  if(incErNI){ niErRaw = niEmployer(emp); }
 
   const SPA_AGE = 66;
   const overSPA = age && age >= SPA_AGE;
@@ -1054,7 +1054,7 @@ function computeTaxes_legacy(){
   let niEr = niErRaw;
   if (incErNI && under21) {
     const ERNI_UST = 50270; // 2025/26 Upper Secondary Threshold for under 21s (approx.)
-    const erBaseUnder21 = Math.max(0, empAfterSac - ERNI_UST);
+    const erBaseUnder21 = Math.max(0, emp - ERNI_UST);
     niEr = erBaseUnder21 * ERNI_RATE;
   }
 
@@ -1106,8 +1106,8 @@ function computeTaxes_legacy(){
   const addRow=(name,rate,amt)=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${name}</td><td class="mono">—</td><td>${rate}</td><td class="mono">${fmt(amt)}</td>`;tbody.appendChild(tr);};
   addRow("NI (inc. self-employed)", "8%/2% & 6%/2%", niTotal);
   if(incErNI){ addRow("Employer NI", "15% > £5,000", niEr); }
-  addRow("Dividends", "8.75 / 33.75 / 39.35%", divTax);
-  addRow("Savings Interest", "20 / 40 / 45%", savTax);
+  addRow("Dividends", "10.75 / 35.75 / 41.35%", divTax);
+  addRow("Savings Interest", "22 / 42 / 47%", savTax);
   addRow("Capital Gains", "18 / 24%", cgtTax);
   addRow("Property CGT", "18 / 24%", cgtPropTax);
   addRow("HICBC", `taper ${HICBC_START.toLocaleString()}–${HICBC_END.toLocaleString()}`, hicbc);
@@ -1737,14 +1737,19 @@ const RATES = {
       "basic": 1000,
       "higher": 500,
       "additional": 0
+    },
+    "rates": {
+      "basic": 0.22,
+      "higher": 0.42,
+      "additional": 0.47
     }
   },
   "dividends": {
     "allowance": 500,
     "rates": {
-      "basic": 0.0875,
-      "higher": 0.3375,
-      "additional": 0.3935
+      "basic": 0.1075,
+      "higher": 0.3575,
+      "additional": 0.4135
     }
   },
   "cgt": {
@@ -1859,6 +1864,7 @@ function compute(inputs) {
   const divAllowance = RATES.dividends.allowance;
   const srsMax = RATES.savings.starting_rate_band;
   const psaMap = RATES.savings.psa;
+  const savingsRates = RATES.savings.rates;
   const bpa = inputs.blind ? itRates.blind_persons_allowance : 0;
 
   const salarySacrifice = inputs.salarySacrifice || 0;
@@ -1983,12 +1989,44 @@ function compute(inputs) {
     alreadyTaxed = res.alreadyTaxed;
   }
 
-  // Savings after SRS/PSA at standard income-tax rates
+  // Savings after SRS/PSA at dedicated savings rates (22/42/47)
   let savingsTax = 0;
   if (savingsAfterPSA > 0) {
-    const res = taxThroughBands(savingsAfterPSA, alreadyTaxed);
-    savingsTax += res.tax;
-    alreadyTaxed = res.alreadyTaxed;
+    let remaining = savingsAfterPSA;
+
+    // Work in taxable-after-allowances space with fixed band limits
+    const basicTop = basicLimitExt;
+    const higherTop = Math.max(basicTop, addThreshold);
+    const higherBandWidth = Math.max(0, higherTop - basicTop);
+
+    const inBasicUsed = Math.min(alreadyTaxed, basicTop);
+    const basicRoom = Math.max(0, basicTop - inBasicUsed);
+
+    const inHigherUsed = Math.max(0, alreadyTaxed - basicTop);
+    const higherRoom = Math.max(0, higherBandWidth - inHigherUsed);
+
+    // Basic band at 22%
+    if (basicRoom > 0 && remaining > 0) {
+      const slice = Math.min(remaining, basicRoom);
+      savingsTax += slice * savingsRates.basic;
+      remaining -= slice;
+      alreadyTaxed += slice;
+    }
+
+    // Higher band at 42%
+    if (higherRoom > 0 && remaining > 0) {
+      const slice = Math.min(remaining, higherRoom);
+      savingsTax += slice * savingsRates.higher;
+      remaining -= slice;
+      alreadyTaxed += slice;
+    }
+
+    // Additional at 47%
+    if (remaining > 0) {
+      savingsTax += remaining * savingsRates.additional;
+      alreadyTaxed += remaining;
+      remaining = 0;
+    }
   }
 
   // Dividends at dividend rates through bands (using the same band positions)
@@ -2056,13 +2094,13 @@ function compute(inputs) {
     }
   }
 
-  // Employee NICs
+  // Employee NICs (salary sacrifice is NI-able: use pre-sacrifice employment income)
   const PT = RATES.ni.employee_class1.primary_threshold;
   const UEL = RATES.ni.employee_class1.upper_earnings_limit;
   const mainRate = RATES.ni.employee_class1.main_rate;
   const addRate = RATES.ni.employee_class1.additional_rate;
 
-  const nicBase = Math.max(0, (inputs.employmentIncome || 0) - salarySacrifice); // salary sacrifice reduces NIC base
+  const nicBase = Math.max(0, (inputs.employmentIncome || 0));
   let eeNIC = 0;
   if (nicBase > PT) {
     const mainSlice = Math.min(nicBase, UEL) - PT;
@@ -2092,12 +2130,12 @@ function compute(inputs) {
     seNIC = 0;
   }
 
-  // Employer NICs (optional)
+  // Employer NICs (optional) — salary sacrifice is NI-able
   let erNIC = 0;
   if (inputs.includeEmployerNIC) {
     const ER_ST = RATES.ni.employer_class1.secondary_threshold;
     const ER_RATE = RATES.ni.employer_class1.rate;
-    const erBase = Math.max(0, (inputs.employmentIncome || 0) - salarySacrifice);
+    const erBase = Math.max(0, (inputs.employmentIncome || 0));
 
     const under21 = age && age < 21;
     if (under21) {
